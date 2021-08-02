@@ -413,9 +413,26 @@ STATUS curlCompleteSync(PCurlResponse pCurlResponse)
         pCurlResponse->callInfo.callResult = SERVICE_CALL_REQUEST_TIMEOUT;
     } else if (result != CURLE_OK) {
         curl_easy_getinfo(pCurlResponse->pCurl, CURLINFO_EFFECTIVE_URL, &url);
-        DLOGW("curl perform failed for url %s with result %s: %s", url, curl_easy_strerror(result), pCurlResponse->callInfo.errorBuffer);
+
+        //
+        // MM - Increase error reporting to elevate up to BUS_CALL error
+        //
+        DLOGE("curl perform failed for url %s with result %s: %s", url, curl_easy_strerror(result), pCurlResponse->callInfo.errorBuffer);
 
         pCurlResponse->callInfo.callResult = getServiceCallResultFromCurlStatus(result);
+
+        switch(result)
+        {
+            case CURLE_OPERATION_TIMEDOUT:
+                retStatus = STATUS_OPERATION_TIMED_OUT;
+                break;
+            case CURLE_COULDNT_RESOLVE_HOST:
+                retStatus = STATUS_NOT_FOUND;
+                break;
+            default:
+                retStatus = STATUS_INTERNAL_ERROR;
+                break;
+        }
     } else {
         // get the response code and note the request completion time
         curl_easy_getinfo(pCurlResponse->pCurl, CURLINFO_RESPONSE_CODE, &pCurlResponse->callInfo.httpStatus);
@@ -431,8 +448,8 @@ STATUS curlCompleteSync(PCurlResponse pCurlResponse)
             STRCAT(headers, header->data);
         }
 
-        DLOGW("HTTP Error %lu : Response: %s\nRequest URL: %s\nRequest Headers:%s", pCurlResponse->callInfo.httpStatus,
-              pCurlResponse->callInfo.responseData, url, headers);
+        DLOGE("HTTP Error %lu : Response: %s : curl result: %lu : callResult: %lu\nRequest URL: %s\nRequest Headers:%s", pCurlResponse->callInfo.httpStatus,
+              pCurlResponse->callInfo.responseData, result, pCurlResponse->callInfo.callResult, url, headers);
     }
 
 CleanUp:
